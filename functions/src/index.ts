@@ -24,8 +24,8 @@ exports.syncUserProjects = functions
     .https
     .onRequest(async (req, res) => {
       try {
-        await syncUserProjects();
-        res.json({success: true});
+        const data = await syncUserProjects();
+        res.json({success: true, message: data});
       } catch (e) {
         console.log("Exception: ", e);
         res.json({success: false, message: "Error: " + e});
