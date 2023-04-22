@@ -1,18 +1,33 @@
-// import * as functions from "firebase-functions";
+import * as functions from "firebase-functions";
+// import {sendEmail} from "./services/email_service";
+import {syncUserProjects} from "./services/firebase_service";
 
-// // Start writing functions
-// // https://firebase.google.com/docs/functions/typescript
+// exports.userProjectsCron = functions
+//     .pubsub
+//     .schedule("*/5 * * * *")
+//     .onRun(async (context) => {
+//       const date: Date = new Date();
 //
-// export const helloWorld = functions.https.onRequest((request, response) => {
-//   functions.logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+//       try {
+//         console.log("Running at: ", date);
+//         await getUserProjects();
+//         return;
+//       } catch (e) {
+//         console.log("Could not run function at: ", date);
+//         await sendEmail(e + " was thrown at " + date);
+//         return;
+//       }
+//     });
 
-// export const redirectUri = functions.https.onRequest(async (req, resp) => {
-//   try {
-//     const code = req.params["code"];
-//     console.log("CODE IS RECEIVED!");
-//   } catch (e) {
-//     console.log("Exception: ", e);
-//   }
-// });
+exports.syncUserProjects = functions
+    .runWith({timeoutSeconds: 540, memory: "1GB"})
+    .https
+    .onRequest(async (req, res) => {
+      try {
+        await syncUserProjects();
+        res.json({success: true});
+      } catch (e) {
+        console.log("Exception: ", e);
+        res.json({success: false, message: "Error: " + e});
+      }
+    });
