@@ -1,5 +1,6 @@
 import {db} from "../utils/constants";
 import {UserModel} from "../models/user_model";
+import { Token } from "../models/token";
 
 export async function syncUserProjects(): Promise<UserModel | undefined> {
   try {
@@ -25,7 +26,6 @@ async function updateUserProjects(user: UserModel): Promise<void> {
         .doc(user.result.id.toString())
         .collection("tokens")
         .get();
-    console.log("Token: ", tokenQuery.docs[0].data());
   } catch (e) {
     console.log("Exception: ", e);
   }

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 
 admin.initializeApp();
-export const db = admin.firestore();
+export const db = getFirestore();
