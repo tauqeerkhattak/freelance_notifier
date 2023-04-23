@@ -1,7 +1,7 @@
 import {apiBaseUrl, db} from "../utils/constants";
 import {UserModel} from "../models/user_model";
 import {Token} from "../models/token";
-import axios, {AxiosError, AxiosResponse} from "axios";
+import axios, {AxiosResponse} from "axios";
 import {sendEmail} from "./email_service";
 import {Project} from "../models/project";
 
