@@ -32,5 +32,6 @@ module.exports = {
     "require-jsdoc": 0,
     "no-unused-vars": 0,
     "max-len": 0,
+    "camelcase": 0,
   },
 };
