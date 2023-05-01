@@ -1,9 +1,10 @@
-import {apiBaseUrl, db} from "../utils/constants";
+import {apiBaseUrl, db, freelanceClientId, freelanceClientSecret, refreshUrl, redirectUri} from "../utils/constants";
 import {UserModel} from "../models/user_model";
 import {Token} from "../models/token";
 import axios, {AxiosResponse} from "axios";
 import {sendEmail} from "./email_service";
 import {Project} from "../models/project";
+import {sendNewProjectsNotification} from "./notification_service";
 
 export async function syncUserProjects(): Promise<any | undefined> {
   const userQuery = await db.collection("users").get();
@@ -40,56 +41,111 @@ async function updateUserProjects(user: UserModel): Promise<any> {
   if (tokens.length == 0) {
     return;
   }
-  const token = tokens[0];
+  let token = tokens[0];
   if (token.isExpired()) {
     console.log("Token is expired");
-    // / TODO: refresh code added here
+    token = await refreshToken(token, user.result.id.toString());
   } else {
     console.log("Token is not expired!");
-    // / TODO: _getProjects here!
-    return await getProjects(token.access_token, user.result.display_name, user.result.id.toString());
+    return await getProjects(
+        token.access_token,
+        user,
+    );
   }
 }
 
-async function getProjects(token: string, username: string, userId: string): Promise<any> {  
+async function refreshToken(token: Token, userId: string): Promise<Token> {
   try {
-    const response: AxiosResponse = await axios.get(apiBaseUrl + "/projects/0.1/projects/all/", {
-      params: {
-        query: "flutter",
-        project_statuses: [
-          "frozen",
-          "active",
-        ],
+    const response = await axios.post(refreshUrl, {
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+      client_id: freelanceClientId,
+      client_secret: freelanceClientSecret,
+      redirect_uri: redirectUri,
+    }, {
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
       },
     });
     if (response.status !== 200) {
-      const errorText = response.statusText + " for user: " + username;
+      const date = new Date();
+      const errorMessage = response.statusText + " at " + date + " for user: " + userId;
+      throw errorMessage;
+    }
+    const newToken = Token.fromJson(response.data);
+    const ref = db.collection("users").doc(userId).collection("tokens");
+    await db.recursiveDelete(ref);
+    await db.collection("users").doc(userId).collection("tokens").add(newToken.toJson());
+    return newToken;
+  } catch (e: any) {
+    console.log("Error: ", e?.message);
+    throw e;
+  }
+}
+
+async function getProjects(token: string, user: UserModel): Promise<any> {  
+  try {
+    const userQuery: string = user.queries.join(" ");
+    console.log("User Query: ", userQuery);
+    const response: AxiosResponse = await axios.get(apiBaseUrl + "/projects/0.1/projects/all/", {
+      params: {
+        query: userQuery,
+        project_statuses: [
+          "active",
+        ],
+        full_description: true,
+        or_search_query: true,
+      },
+    });
+    if (response.status !== 200) {
+      const errorText = response.statusText + " for user: " + user.result.username;
       throw Error(errorText);
     } else {
       console.log("Status: ", response.statusText);
       const rawData: any[] = response.data["result"]["projects"];
+      console.log("Headers: ", response.headers);
       const projects: Project[] = rawData.map((data) => {
         return Project.fromJson(data);
       });
       console.log("Total projects: ", projects.length);
       
-      await saveProjects(projects, userId);
+      await saveProjects(projects, user);
     }
   } catch (e: any) {
-    const errorText = e?.message + " for user: " + username;
+    const errorText = e?.message + " for user: " + user.result.id;
     throw Error(errorText);
   }
 }
 
-async function saveProjects(projects: Project[], userId: string): Promise<void> {
+async function saveProjects(projects: Project[], user: UserModel): Promise<void> {
   const batch = db.batch();
+  const userID: string = user.result.id.toString();
+  const ref = await db
+      .collection("users")
+      .doc(userID)
+      .collection("projects")
+      .get();
+  const oldProjects: Project[] = ref.docs.map((doc) => {
+    return Project.fromJson(doc.data());
+  });
+  let count = 0;
   for (const project of projects) {
-    const doc = db
-        .collection("users")
-        .doc(userId)
-        .collection("projects")
-        .doc(project.id.toString());
-    batch.set(doc, project.toJson());
+    const exists = oldProjects.some((old) => {
+      return old.id == project.id;
+    });
+    if (exists) {
+      continue;
+    } else {
+      count++;
+      const doc = db
+          .collection("users")
+          .doc(userID)
+          .collection("projects")
+          .doc();
+      batch.set(doc, project.toJson());
+    }
   }
+  await sendNewProjectsNotification({user: user, count: count});
+  console.log("New projects count: ", count);
   await batch.commit();
 }
